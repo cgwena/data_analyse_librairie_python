@@ -1,0 +1,318 @@
+---
+title: "Analyse des ventes de la librairie Lapage"
+format: pdf
+---
+
+## Import et exploration des fichiers
+
+Import
+
+```{r}
+library(prettyR)
+library(dplyr)
+library(ggplot2)
+library(zoo)
+
+options(scipen = 999)
+```
+
+```{r}
+customers <- read.csv2("data/customers.csv")
+products <- read.csv2("data/products.csv")
+transactions <- read.csv2("data/transactions.csv")
+```
+
+### Exploration du fichier customer
+
+```{r}
+dim(customers)
+```
+
+```{r}
+str(customers)
+```
+
+```{r}
+head(customers)
+```
+
+```{r}
+unique(customers$sex)
+```
+
+```{r}
+boxplot(customers$birth)
+```
+
+Recherche des années de naissance les plus anciennes
+
+```{r}
+customers %>%
+  arrange(birth) %>%
+  head(10)
+```
+
+Répartition par genre
+
+```{r}
+repartition_genre <- table(customers$sex)
+
+barplot(repartition_genre)
+```
+
+### Exploration du fichier products
+
+```{r}
+dim(products)
+```
+
+```{r}
+str(products)
+```
+
+```{r}
+products <- products %>%
+  mutate(price = as.numeric(price))
+```
+
+```{r}
+head(products)
+```
+
+```{r}
+
+boxplot(products$price)
+```
+
+```{r}
+
+livres_atypiques <- products %>%
+  filter(price > 50) %>%
+  arrange(desc(price)) 
+
+
+nrow(livres_atypiques)
+
+
+head(livres_atypiques)
+```
+
+Distribution des prix
+
+```{r}
+
+moyenne_prix <- mean(products$price, na.rm = TRUE)
+ecart_type_prix <- sd(products$price, na.rm = TRUE)
+
+
+ggplot(data = products, aes(x = price)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                 fill = "steelblue", color = "white", alpha = 0.7) +
+  
+  stat_function(fun = dnorm, 
+                args = list(mean = moyenne_prix, sd = ecart_type_prix), 
+                color = "red", linewidth = 1.2) +
+  
+  theme_minimal() +
+  labs(
+    title = "Distribution des prix vs Courbe de Gauss",
+    x = "Prix des livres",
+    y = "Densité"
+  )
+```
+
+### Exploration du fichier transaction
+
+```{r}
+dim(transactions)
+```
+
+```{r}
+str(transactions)
+```
+
+Transformation du format de la date, ajout d'une colonne mois pour les analyse par mois
+
+```{r}
+transactions <- transactions %>%
+  mutate(date = as.Date(date, format("%Y-%m-%d")))
+transactions <- transactions %>%
+  mutate(mois = format(date, "%Y-%m"))
+```
+
+```{r}
+head(transactions, n=20)
+```
+
+Vérification des données de date
+
+```{r}
+anomalies_date <- transactions %>%
+  filter(is.na(mois))
+
+head(anomalies_date)
+```
+
+Suppression des lignes vides
+
+```{r}
+transactions <- transactions %>%
+  filter(!is.na(id_prod) & id_prod != "")
+
+nrow(transactions)
+```
+
+### Fusion des fichiers transactions et produits
+
+```{r}
+
+ventes_enrichies <- transactions %>%
+  left_join(products, by = "id_prod")
+
+head(ventes_enrichies, n=20)
+```
+
+### Chiffre d'affaire
+
+```{r}
+CA <- ventes_enrichies %>%
+  summarise( 
+    CA = sum(price, na.rm = TRUE)
+  )
+print(CA)
+```
+
+### Chiffre d'affaire par mois
+
+```{r}
+CA_mois <- ventes_enrichies %>%
+  group_by(mois)%>%
+  summarise( 
+    CA = sum(price, na.rm = TRUE)
+  )
+print(CA_mois)
+```
+
+```{r}
+CA_mois <- CA_mois %>%
+  mutate(
+
+    Moy_Mobile = rollmean(CA, k = 3, align = "right", fill = NA)
+  )
+
+print(CA_mois)
+```
+
+```{r}
+milieux_barres <- barplot(
+  height = CA_mois$CA,
+  names.arg = CA_mois$mois,
+  main = 'Chiffre d\'affaires et Moyenne Mobile (3 mois)',
+  xlab = "Mois",
+  ylab = "Chiffre d\'affaires (€)",
+  las = 2
+)
+
+lines(
+  x = milieux_barres,                         
+  y = CA_mois$Moy_Mobile,                     
+  col = "red",                                 
+  lwd = 3                                      
+)
+
+
+
+```
+
+### Clients
+
+```{r}
+CA_client <- ventes_enrichies %>%
+  group_by(client_id) %>%
+  summarise( CA_client = sum(price, na.rm = TRUE)) %>%
+  arrange(CA_client)
+  
+
+print(CA_client)
+```
+
+```{r}
+CA_client_lorenz <- CA_client %>%
+mutate(
+    part_client = row_number() / n(),
+    part_ca = cumsum(CA_client) / sum(CA_client)
+    ) 
+print(CA_client_lorenz)
+```
+
+Courbe de Lorenz
+
+```{r}
+ggplot(data = CA_client_lorenz, aes(x = part_client, y = part_ca)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  
+
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", linewidth = 1) +
+  
+
+  labs(
+    title = "Courbe de Lorenz - Concentration du Chiffre d'Affaires",
+    x = "Part cumulée des clients",
+    y = "Part cumulée du Chiffre d'Affaires"
+  ) +
+
+  coord_fixed(ratio = 1, xlim = c(0, 1), ylim = c(0, 1))
+```
+
+Top 5 clients
+
+```{r}
+top_clients <- CA_client %>%
+  arrange(desc(CA_client)) %>%
+  head(5)
+
+print(top_clients, n = 5)
+```
+
+### Création d'une table b2b
+
+```{r}
+clients_b2b <- c("c_1609", "c_4958", "c_6714", "c_3454")
+
+ventes_b2b <- ventes_enrichies %>%
+  filter(client_id %in% clients_b2b)
+
+head(ventes_b2b)
+```
+
+Répartition du CA pour les clients B2B
+
+```{r}
+CA_repartition_B2B <- ventes_b2b %>%
+  group_by(client_id) %>%
+  summarise( CA_client_B2B = sum(price, na.rm = TRUE)) %>%
+  arrange(desc(CA_client_B2B))
+head(CA_repartition_B2B)
+```
+
+```{r}
+ggplot(CA_repartition_B2B) +
+ aes(x = reorder(client_id, -CA_client_B2B), y = CA_client_B2B) +
+ geom_col(fill = "#143F8D") +
+ labs(x = "Client", 
+ y = "CA", title = "CA par client b2b") +
+ theme_minimal()
+```
+
+### Création d'une table b2c
+
+```{r}
+clients_b2b <- c("c_1609", "c_4958", "c_6714", "c_3454")
+
+ventes_b2c <- ventes_enrichies %>%
+  filter(!client_id %in% clients_b2b)
+
+nrow(ventes_b2c)
+
+write.csv(ventes_b2c, file = "data/ventes_b2c.csv", row.names = FALSE)
+```

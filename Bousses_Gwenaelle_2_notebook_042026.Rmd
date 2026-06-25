@@ -1,0 +1,542 @@
+---
+title: "Analyse des ventes - librairie Lapage - clients b2c"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Import et exploration des fichiers
+
+Import
+
+```{r}
+library(prettyR)
+library(dplyr)
+library(ggplot2)
+library(zoo)
+library(esquisse)
+
+```
+
+## Indicateurs de vente
+
+### Nombre de clients par mois
+
+```{r}
+head(ventes_b2c)
+```
+
+```{r}
+nb_clients_mois <- ventes_b2c %>%
+  group_by(mois) %>%
+  summarise(
+    nb_clients  = n_distinct(client_id)
+  )
+print(nb_clients_mois, n=25)
+```
+
+Graphique du nombre de clients par mois
+
+```{r}
+ggplot(data = nb_clients_mois, aes(x = mois, y = nb_clients, group = 1)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Nombre de clients par mois",
+    x = "Mois",
+    y = "Nombre de clients"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+### Nombre de transactions par mois
+
+```{r}
+nb_transactions_mois <- ventes_b2c %>%
+  group_by(mois) %>%
+  summarise(
+    nb_transactions  = n_distinct(session_id)
+  )
+print(nb_transactions_mois, n=25)
+```
+
+Graphique du nombre de transactions par mois
+
+```{r}
+ggplot(data = nb_transactions_mois, aes(x = mois, y = nb_transactions, group = 1)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Nombre de transactions par mois",
+    x = "Mois",
+    y = "Nombre de transactionx"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Incline les textes
+```
+
+### Nombre de produits vendus
+
+```{r}
+nb_produits_vendus <- ventes_b2c %>%
+  summarise(n())
+print(nb_produits_vendus)
+```
+
+Nombre de produits vendus par mois
+
+```{r}
+nb_ventes_mois <- ventes_b2c %>%
+  group_by(mois) %>%
+  summarise(
+    nb_ventes  = n()
+  )
+print(nb_ventes_mois, n=25)
+```
+
+```{r}
+ggplot(data = nb_ventes_mois, aes(x = mois, y = nb_ventes, group = 1)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Nombre de ventes par mois",
+    x = "Mois",
+    y = "Nombre de ventes"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Chiffre d'affaire par mois
+
+```{r}
+CA_mois <- ventes_b2c %>%
+  group_by(mois)%>%
+  summarise( 
+    CA = sum(price, na.rm = TRUE)
+  )
+print(CA_mois)
+```
+
+```{r}
+CA_mois <- CA_mois %>%
+  mutate(
+
+    Moy_Mobile = rollmean(CA, k = 3, align = "right", fill = NA)
+  )
+
+print(CA_mois)
+```
+
+```{r}
+ggplot(data = CA_mois, aes(x = mois)) +
+  geom_col(aes(y = CA), fill = "steelblue") +
+  
+  geom_line(aes(y = Moy_Mobile, group = 1), color = "red", linewidth = 1.2) +
+  
+  labs(
+    title = "Chiffre d'affaires et Moyenne Mobile (3 mois)",
+    x = "Mois",
+    y = "Chiffre d'affaires (€)"
+  ) +
+  
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+
+```
+
+### CA par catégorie
+
+```{r}
+CA_categ_evol <- ventes_b2c %>%
+  group_by(categ, mois)%>%
+  summarise( 
+    CA = sum(price, na.rm = TRUE),
+    .groups = "drop"
+  )
+print(CA_categ_evol)
+```
+
+```{r}
+ggplot(data = CA_categ_evol, aes(x = mois, y = CA, group = categ, color = as.factor(categ))) +
+  geom_line(linewidth = 1.2) +                        
+  theme_minimal()+
+  labs(
+    title = "Évolution du Chiffre d'Affaires par catégorie",
+    x = "Mois",
+    y = "Chiffre d'Affaires (€)",
+    color = "Catégorie"                                
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+### Références
+
+Répartition par catégorie
+
+```{r}
+categ_repartition <- ventes_b2c %>%
+  group_by(categ) %>%
+  summarise(
+    CA_categ = sum(price)
+  )
+  print(categ_repartition)
+```
+
+```{r}
+ggplot(categ_repartition) +
+ aes(x = categ, y = CA_categ) +
+ geom_col(fill = "#112446") +
+ labs(x = "Catégorie", 
+ y = "CA", title = "Chiffre d'affaire par catégorie") +
+ theme_minimal()
+
+```
+
+Tops et flops
+
+```{r}
+references_top <- ventes_b2c %>%
+  group_by(id_prod, categ) %>%
+  summarise( ventes_par_ref = n()) %>%
+  arrange(desc(ventes_par_ref)) %>%
+  head(n = 10)
+print(references_top)
+```
+
+```{r}
+references_flop <- ventes_b2c %>%
+  group_by(id_prod, categ) %>%
+  summarise( ventes_par_ref = n()) %>%
+  ungroup() %>%
+  arrange(ventes_par_ref)%>%
+  head(n = 30)
+print(as.data.frame(references_flop, n=30))
+```
+
+### Clients
+
+```{r}
+CA_client <- ventes_b2c %>%
+  group_by(client_id) %>%
+  summarise( CA_client = sum(price, na.rm = TRUE)) %>%
+  arrange(CA_client)
+
+print(CA_client)
+```
+
+```{r}
+CA_client_lorenz <- CA_client %>%
+mutate(
+    part_client = row_number() / n(),
+    part_ca = cumsum(CA_client) / sum(CA_client)
+    ) 
+print(CA_client_lorenz)
+```
+
+Courbe de Lorenz
+
+```{r}
+library(ggplot2)
+
+ggplot(data = CA_client_lorenz, aes(x = part_client, y = part_ca)) +
+  geom_line(color = "darkblue", linewidth = 1.2) +
+  
+
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", linewidth = 1) +
+  
+
+  labs(
+    title = "Courbe de Lorenz - Concentration du Chiffre d'Affaires",
+    x = "Part cumulée des clients",
+    y = "Part cumulée du Chiffre d'Affaires"
+  ) +
+
+  coord_fixed(ratio = 1, xlim = c(0, 1), ylim = c(0, 1))
+```
+
+### Tests de corrélation
+
+Fusion des fichiers ventes_b2c et customers
+
+```{r}
+ventes_enrichies_b2c <- ventes_b2c %>%
+  left_join(customers, by = "client_id")
+
+head(ventes_enrichies_b2c, n=20)
+```
+
+### Tests de corrélation
+
+#### Genre / Catégorie
+
+```{r}
+genre_categorie <- table(ventes_enrichies_b2c$sex, ventes_enrichies_b2c$categ)
+head(genre_categorie)
+```
+
+```{r}
+## 2 variables qualitatives, plus de 2 catégories : test chi-2
+chisq.test(genre_categorie)
+```
+
+```{r}
+mosaicplot(genre_categorie, 
+           shade = TRUE, 
+           main = "Lien entre Genre et Catégorie achetée",
+           las = 1)
+```
+
+```{r}
+ventes_categ1 <- ventes_enrichies_b2c %>%
+  filter(categ == 1)
+
+ggplot(ventes_categ1, aes(x = sex, fill = sex)) +
+  geom_bar(alpha = 0.8) +
+  theme_minimal() +
+  labs(
+    title = "Répartition des acheteurs (Uniquement Catégorie 1)",
+    x = "Genre",
+    y = "Nombre d'achats"
+  ) +
+  scale_fill_manual(values = c("f" = "red", "m" = "steelblue")) +
+  theme(legend.position = "none")
+```
+
+#### Âge / Montant d'achat
+
+```{r}
+montant_achat_client <- ventes_enrichies_b2c %>%
+  group_by(client_id, birth, categ) %>%
+  summarise(montant_total = sum(price, na.rm = TRUE), .groups='drop') %>%
+  mutate(age = 2023 - birth)
+head(montant_achat_client)
+```
+
+```{r}
+moyenne_montant <- mean(montant_achat_client$montant_total, na.rm = TRUE)
+ecart_type_montant <- sd(montant_achat_client$montant_total, na.rm = TRUE)
+
+
+ggplot(data = montant_achat_client, aes(x = montant_total)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                 fill = "steelblue", color = "white", alpha = 0.7) +
+  
+  stat_function(fun = dnorm, 
+                args = list(mean = moyenne_montant, sd = ecart_type_montant), 
+                color = "red", linewidth = 1.2) +
+  
+  theme_minimal() +
+  labs(
+    title = "Distribution des montants vs Courbe de Gauss",
+    x = "Montant dépensé",
+    y = "Densité"
+  )
+```
+
+```{r}
+ggplot(montant_achat_client) +
+  geom_hex(aes(x = age, y = montant_total), bins = 75) +
+  labs(
+    title = 'Montant total d\'achat en fonction de l\'âge des clients',
+    x = 'Âge',
+    y = 'Montant d\'achat'
+  ) +
+  theme_minimal()
+```
+
+```{r}
+## 2 variables quantitatives, ne suivent pas la courbe de Gauss : test non paramétrique : Spearman
+cor.test(montant_achat_client$age, montant_achat_client$montant_total, method = 'spearman')
+```
+
+#### Âge / Fréquence d'achat
+
+```{r}
+frequence_achat_client <- ventes_enrichies_b2c %>%
+  group_by(client_id, birth, categ) %>%
+  summarise(frequence_achat = n(), .groups = 'drop') %>%
+  mutate(age = 2023 - birth)
+head(frequence_achat_client)
+```
+
+```{r}
+moyenne_frequence <- mean(frequence_achat_client$frequence_achat, na.rm = TRUE)
+ecart_type_frequence <- sd(frequence_achat_client$frequence_achat, na.rm = TRUE)
+
+
+ggplot(data = frequence_achat_client, aes(x = frequence_achat)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                 fill = "steelblue", color = "white", alpha = 0.7) +
+  
+  stat_function(fun = dnorm, 
+                args = list(mean = moyenne_frequence, sd = ecart_type_frequence), 
+                color = "red", linewidth = 1.2) +
+  
+  theme_minimal() +
+  labs(
+    title = "Distribution des fréquences vs Courbe de Gauss",
+    x = "Fréquence d'achat",
+    y = "Densité"
+  )
+```
+
+```{r}
+ggplot(frequence_achat_client) +
+  geom_hex(aes(x = age, y = frequence_achat), bins = 75) +
+  labs(
+    title = 'Fréquence d\'achat en fonction de l\'âge des clients',
+    x = 'Âge',
+    y = 'Fréquence d\'achat'
+  ) +
+  theme_minimal()
+```
+
+```{r}
+## 2 variables quantitatives, ne suivent pas la crourbe de Gauss : test non paramétrique : Spearman
+cor.test(x= frequence_achat_client$age, y = frequence_achat_client$frequence_achat, method = 'spearman')
+```
+
+#### Âge / Panier moyen
+
+```{r}
+panier_moyen_client <- ventes_enrichies_b2c %>%
+  group_by(client_id, birth, categ) %>%
+  summarise(panier_moyen = sum(price, na.rm = TRUE)/n(), .groups='drop') %>%
+  mutate(age = 2023 - birth)
+head(panier_moyen_client)
+```
+
+```{r}
+moyenne_panier <- mean(panier_moyen_client$panier_moyen, na.rm = TRUE)
+ecart_type_panier <- sd(panier_moyen_client$panier_moyen, na.rm = TRUE)
+
+
+ggplot(data = panier_moyen_client, aes(x = panier_moyen)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                 fill = "steelblue", color = "white", alpha = 0.7) +
+  
+  stat_function(fun = dnorm, 
+                args = list(mean = moyenne_panier, sd = ecart_type_panier), 
+                color = "red", linewidth = 1.2) +
+  
+  theme_minimal() +
+  labs(
+    title = "Distribution des paniers moyen vs Courbe de Gauss",
+    x = "Panier moyen",
+    y = "Densité"
+  )
+```
+
+```{r}
+ggplot(panier_moyen_client) +
+  geom_hex(aes(x = age, y = panier_moyen), bins = 75) +
+  labs(
+    title = 'Montant du panier moyen en fonction de l\'âge des clients',
+    x = 'Âge',
+    y = 'Montant du panier moyen'
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+## 2 variables quantitatives, ne suivent pas la crourbe de Gauss : test non paramétrique : Spearman
+cor.test(panier_moyen_client$age, panier_moyen_client$panier_moyen, method = 'spearman')
+```
+
+#### Âge / Catégorie
+
+```{r}
+age_categorie <- ventes_enrichies_b2c %>%
+  group_by(client_id, birth, categ) %>%
+  mutate(age = 2023 - birth) %>%
+  arrange(client_id)
+head(age_categorie)
+```
+
+```{r}
+moyenne_age <- mean(age_categorie$age, na.rm = TRUE)
+ecart_type_age <- sd(age_categorie$age, na.rm = TRUE)
+
+
+ggplot(data = age_categorie, aes(x = age)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                 fill = "steelblue", color = "white", alpha = 0.7) +
+  
+  stat_function(fun = dnorm, 
+                args = list(mean = moyenne_age, sd = ecart_type_age), 
+                color = "red", linewidth = 1.2) +
+  
+  theme_minimal() +
+  labs(
+    title = "Distribution des âges vs Courbe de Gauss",
+    x = "Age",
+    y = "Densité"
+  )
+```
+
+```{r}
+age_categorie$categ <- as.factor(age_categorie$categ)
+ggplot(age_categorie, aes(x=categ, y = age, fill = categ)) +
+  geom_boxplot() +
+  labs(
+    title = 'Catégories achetées en fonction de l\'âge des clients',
+    x = 'Catégorie',
+    y = 'Âge'
+  ) +
+  theme_minimal()     
+       
+```
+
+```{r}
+## Une variable quantitative et une qualitative, plus de 2 catégories, distribution ne suis pas la courbe de Gauss : test non paramétrique : Kruskal-Wallis
+kruskal.test(age_categorie$categ, age_categorie$age)
+```
+
+```{r}
+prix_moyen_categ <- ventes_b2c %>%
+  group_by(categ) %>%
+  summarise(prix_moyen = mean(price, na.rm = TRUE))
+print(prix_moyen_categ)
+```
+
+#### Prix / Catégorie
+
+```{r}
+ventes_enrichies_b2c$categ <- as.factor(ventes_enrichies_b2c$categ)
+
+ggplot(ventes_enrichies_b2c, aes(x=categ, y = price, fill = categ)) +
+  geom_boxplot() +
+  scale_y_continuous(breaks = seq(0, 300, by = 10), limits = c(0, 150))  +
+  labs(
+    title = 'Prix des livres en fonction des catégories',
+    x = 'Catégorie',
+    y = 'Prix'
+  ) +
+  theme_minimal()     
+       
+```
+
+```{r}
+## Une variable quantitative et une qualitative, plus de 2 catégories, distribution ne suis pas la courbe de Gauss : test non paramétrique : Kruskal-Wallis
+kruskal.test(ventes_enrichies_b2c$categ, ventes_enrichies_b2c$price)
+```
+
+#### Nombre de ventes / Catégorie
+
+```{r}
+nb_ventes_categ <- ventes_enrichies_b2c %>%
+  group_by(categ) %>%
+  summarise(nb_ventes = n())
+
+print(nb_ventes_categ)
+```
+
+```{r}
+ggplot(nb_ventes_categ, aes(x = categ, y = nb_ventes, fill = categ)) +
+  geom_col()
+```
