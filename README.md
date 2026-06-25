@@ -21,6 +21,9 @@ L'intégralité du projet a été développée en **Langage R** pour garantir la
 * **Data Visualization :** `ggplot2` (graphes de tendances, boîtes à moustaches, courbe de Lorenz)
 * **Analyses Statistiques :** Packages natifs de R pour les tests d'hypothèses (`vcd` pour les analyses de contingence, tests de corrélation, Kruskal-Wallis).
 
+## Données
+Pour les fichiers trop lourds (transactions.csv, ventes.csv), j'ai utilisé des échantillons de 1000 lignes.
+
 ## 🚀 Méthodologie de Reproductibilité
 
 1. **Cloner le projet :**
